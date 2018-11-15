@@ -1,0 +1,171 @@
+---
+title: "Homework 3"
+author: "Alejandro D. Osborne"
+date: "November 4, 2018"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r}
+library(tidyverse) 
+library(knitr)
+library(psych)
+library(readr)
+library(kableExtra)
+library(ggiraph)
+library(cowplot)
+library(reshape2)
+library(corrgram)
+library(gridExtra)
+library(usdm)
+library(mice)
+library(pROC)
+library(reshape2)
+library(caTools)
+library(caret)
+library(ROCR)
+library(magrittr)
+library(data.table)
+library(zoo)
+library(ISLR)
+library(leaps)
+library(fBasics)
+library(GGally)
+library(Amelia)
+library(leaps)
+```
+
+```{r}
+Dtrain <- read.csv("https://raw.githubusercontent.com/AlejandroOsborne/DATA-621/master/crime-training-data.csv")
+evalD <- read.csv("https://raw.githubusercontent.com/AlejandroOsborne/DATA-621/master/crime-evaluation-data.csv")
+```
+
+
+```{r}
+train <- describe(Dtrain) 
+train$na_count <- sapply(Dtrain, function(y) sum(length(which(is.na(y)))))
+```
+
+```{r}
+kable(train, "html", escape = F) %>% kable_styling("striped", full_width = T) %>% column_spec(1, bold = T) %>% scroll_box(width = "100%", height = "700px")
+```
+
+
+```{r}
+long <- melt(Dtrain, id.vars= "target")%>% dplyr::filter(variable != "chas") %>% mutate(target = as.factor(target))
+```
+
+
+```{r}
+ggplot(data = long, aes(x = variable, y = value)) + geom_boxplot(aes(fill = target)) + facet_wrap( ~ variable, scales = "free")
+```
+
+```{r}
+crimehistory <- Dtrain
+```
+
+
+```{r}
+crimehistory %>% keep(is.numeric) %>%
+gather() %>%
+ggplot(aes(value)) +
+facet_wrap(~ key, scales = "free") +
+geom_histogram(bins = 35)
+```
+
+```{r}
+ggplot(Dtrain, aes(Dtrain$medv ,target)) + geom_point() + geom_smooth(method = "glm", method.args = list(family = "binomial"), se = FALSE)
+```
+
+```{r}
+kable(cor(drop_na(Dtrain))[,14], "html", escape = F) %>% kable_styling("striped", full_width = F) %>% column_spec(1, bold = T) %>% scroll_box(height = "600px")
+```
+
+```{r}
+corrgram(drop_na(Dtrain), order=TRUE, upper.panel=panel.cor, main="CRIME")
+```
+
+```{r}
+missmap(evalD, main = "Missing values vs observed")
+```
+
+
+```{r}
+crime_N = data.frame(
+dis_n = log(Dtrain$dis),
+lstat_n = log(Dtrain$lstat),
+age_n = log(Dtrain$age),
+zn_n = Dtrain$zn^2,
+nox_n = Dtrain$nox^2,
+tax_n = Dtrain$tax^2,
+rad_n = Dtrain$rad^2)
+dataset1 = Dtrain
+dataset2 = log(Dtrain)
+dataset2$zn = Dtrain$zn
+dataset2$target = Dtrain$target
+dataset2$chas = Dtrain$chas
+dataset3 = cbind(Dtrain,crime_N)
+```
+
+```{r}
+mod1 = glm(data=Dtrain,target~.,family=binomial)
+summary(mod1)
+```
+
+```{r}
+mod2 = glm(formula = target ~ rad + nox + dis + medv + ptratio, data = Dtrain)
+summary(mod2)
+```
+
+```{r}
+mod3 = glm(data=dataset2,target~.,family=binomial)
+summary(mod3)
+```
+
+```{r}
+mod4 = glm(data=dataset3,target~.,family=binomial)
+summary(mod4)
+```
+
+```{r}
+anova(mod2, test="Chisq")
+```
+
+```{r}
+newpredict <- predict(mod2, Dtrain, type='response')
+
+curve <- roc(Dtrain$target, newpredict, plot=T, asp=NA,
+                legacy.axes=T, main = "ROC Curve", ret="tp")
+```
+
+```{r}
+curve["auc"]
+```
+
+```{r}
+Test =predict(mod2, newdata=evalD)
+Test = ifelse(Test<.5,0,1)
+hist(Test)
+```
+
+```{r}
+predictTest <- predict(mod2, newdata=evalD, type= "response")
+summary(predictTest)
+```
+
+```{r}
+predictTable_Test <- ifelse(predictTest > 0.3, 1, 0) 
+table(predictTable_Test)
+```
+
+```{r}
+predictTest3 <- predict(mod3, newdata=evalD, type= "response")
+summary(predictTest3)
+```
+
+```{r}
+predictTable_Test3 <- ifelse(predictTest3 > 0.3, 1, 0) 
+table(predictTable_Test3)
+```
+
