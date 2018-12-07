@@ -429,5 +429,5 @@ finalpreds.probs <- predict(finalmod, test, type="prob")
 finaldf <- cbind(finalpreds.probs, TARGET_FLAG=finalpreds)
 finalAmountPreds <- predict(mod3lm, test)
 finaldf <- cbind(finaldf, TARGET_AMT = finalAmountPreds)
-write.csv(finaldf, 'HW4preds.csv', row.names = FALSE)
+write.csv(finaldf, 'Assignment4Predict.csv', row.names = FALSE)
 ```
