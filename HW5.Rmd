@@ -1,0 +1,323 @@
+---
+title: "Homework 5"
+author: "Alejandro D. Osborne"
+date: "December 10, 2018"
+output: html_document
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(tidyverse)
+library(knitr)
+library(psych)
+library(readr)
+library(kableExtra)
+library(cowplot)
+library(reshape2)
+library(corrgram)
+library(gridExtra)
+library(usdm)
+library(mice)
+library(pROC)
+library(reshape2)
+library(caTools)
+library(caret)
+library(ROCR)
+library(MASS)
+library(Amelia)
+library(rJava)
+library(glmulti)
+library(pscl)
+```
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+wtrain <- read_csv("https://raw.githubusercontent.com/AlejandroOsborne/DATA-621/master/wine-training-data.csv")
+weval <- read_csv("https://raw.githubusercontent.com/AlejandroOsborne/DATA-621/master/wine-evaluation-data.csv")
+```
+
+```{r echo=FALSE}
+train <- describe(wtrain)
+train$na_count <- sapply(wtrain, function(y) sum(length(which(is.na(y)))))
+
+kable(train, "html", escape = F) %>%
+  kable_styling("striped", full_width = T) %>%
+  column_spec(1, bold = T) %>%
+  scroll_box(width = "100%", height = "700px")
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+newggplot <- wtrain[,-c(1)]
+
+ggplot(melt(newggplot), aes(x=factor(variable), y=value)) + 
+  geom_boxplot() + 
+  stat_summary(fun.y = mean, color = "blue", geom = "point") +  
+  stat_summary(fun.y = median, color = "red", geom = "point") +
+  coord_flip() +
+  theme_bw()
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot2 <- wtrain[,-c(1, 6, 8, 9)]
+
+ggplot(melt(ggplot2), aes(x=factor(variable), y=value)) + 
+  geom_boxplot() + 
+  stat_summary(fun.y = mean, color = "blue", geom = "point") +  
+  stat_summary(fun.y = median, color = "red", geom = "point") +
+  coord_flip() +
+  theme_bw()
+```
+
+
+
+
+```{r echo=FALSE}
+ggplot(wtrain, aes(wtrain$TARGET )) + geom_bar()
+```
+
+
+
+```{r echo=FALSE}
+long <- melt(wtrain, id.vars= colnames(wtrain)[1:13])%>% 
+  mutate(target = as.factor(TARGET))
+
+ggplot(data = long, aes(x = value)) + 
+  geom_bar(aes(fill = target)) + 
+  facet_wrap( ~ variable, scales = "free")
+```
+
+
+```{r echo=FALSE}
+w_hist <- wtrain[,-c(1, 2, 14:16)]
+
+w_hist %>%
+  keep(is.numeric) %>%                     
+  gather() %>%                             
+  ggplot(aes(value)) +                     
+    facet_wrap(~ key, scales = "free") +  
+    geom_histogram(bins = 35) 
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+kable(cor(drop_na(wtrain))[,14], "html", escape = F) %>%
+  kable_styling("striped", full_width = F) %>%
+  column_spec(1, bold = T) %>%
+  scroll_box(height = "1000px")
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+corrgram(drop_na(wtrain), order=TRUE,
+         upper.panel=panel.cor, main="Wine")
+```
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+missmap(wtrain, col=c("black", "grey"), main = "Missing values vs observed")
+```
+
+
+
+
+
+
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+missbd <- wtrain
+missbd <- missbd[,-c(1)]
+```
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+
+init = mice(missbd, maxit=0) 
+meth = init$method
+predM = init$predictorMatrix
+
+predM[, c("TARGET")]=0
+
+imputed = mice(missbd, method="rf", predictorMatrix=predM, m=5)
+
+imputed <- complete(imputed)
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+imputedtable <- describe(imputed)
+
+kable(imputedtable, "html", escape = F) %>%
+  kable_styling("striped", full_width = T) %>%
+  column_spec(1, bold = T) %>%
+  scroll_box(width = "100%", height = "700px")
+```
+
+
+```{r include=FALSE}
+absdata <- abs(imputed)
+```
+
+```{r echo=FALSE}
+absdata1 <- absdata[,-c(1, 2, 14:16)]
+
+absdata1 %>%
+  keep(is.numeric) %>%                     
+  gather() %>%                             
+  ggplot(aes(value)) +                     
+    facet_wrap(~ key, scales = "free") +  
+    geom_histogram(bins = 35) 
+```
+
+```{r echo=FALSE}
+absdata1 %>%
+  keep(is.numeric) %>%                     
+  gather() %>%                             
+  ggplot(aes(value)) +                     
+    facet_wrap(~ key, scales = "free") +  
+    geom_histogram(bins = 35) +
+  scale_x_log10()
+```
+
+
+```{r echo=FALSE}
+poissonmod1 <- glm(TARGET ~., data=imputed, family=poisson)
+summary(poissonmod1)
+```
+
+
+```{r echo=FALSE}
+new_wtrain <- wtrain[,-c(1)]
+
+poissonmod2 <- glm(TARGET ~., data=new_wtrain, family=poisson)
+summary(poissonmod2)
+
+```
+
+
+```{r echo=FALSE}
+negbinomMod <- glm.nb(TARGET ~., data=imputed)
+summary(negbinomMod)
+```
+
+```{r echo=FALSE}
+mod4 <- lm(TARGET ~., data = imputed)
+summary(mod4)
+```
+
+```{r echo=FALSE}
+mod5 <- zeroinfl(TARGET ~. | STARS, data = imputed, dist = 'negbin')
+summary(mod5)
+```
+
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+
+
+glmulti.lm.out <-
+    glmulti(imputed$TARGET ~., data = imputed,
+            level = 1,               # No interaction considered
+            method = "h",            # Exhaustive approach
+            crit = "aic",            # AIC as criteria
+            confsetsize = 5,         # Keep 5 best models
+            plotty = F, report = F,  # No plot or interim reports
+            fitfunction = "lm")      # lm function
+
+## Show 5 best models (Use @ instead of $ for an S4 object)
+glmulti.lm.out@formulas
+```
+
+
+
+
+```{r}
+glmmodel <- glm(imputed$TARGET ~ 1 + VolatileAcidity + CitricAcid + Chlorides + 
+    FreeSulfurDioxide + TotalSulfurDioxide + Density + pH + Sulphates + 
+    Alcohol + LabelAppeal + AcidIndex + STARS, data = imputed)
+
+summary(glmmodel)
+```
+
+
+```{r}
+glmmodelabs <- glm(absdata$TARGET ~ 1 + VolatileAcidity + CitricAcid + Chlorides + 
+    FreeSulfurDioxide + TotalSulfurDioxide + Density + pH + Sulphates + 
+    Alcohol + LabelAppeal + AcidIndex + STARS, data = absdata)
+
+summary(glmmodelabs)
+```
+
+
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+init = mice(weval, maxit=0) 
+meth = init$method
+predM = init$predictorMatrix
+
+
+new_imputed = mice(weval, method="rf", predictorMatrix=predM, m=5)
+
+new_imputed <- complete(new_imputed)
+```
+
+```{r echo=FALSE}
+imputedtable <- describe(new_imputed)
+
+kable(imputedtable, "html", escape = F) %>%
+  kable_styling("striped", full_width = T) %>%
+  column_spec(1, bold = T) %>%
+  scroll_box(width = "100%", height = "700px")
+```
+
+
+
+```{r include=FALSE}
+modVal <- function(mod, test){
+  preds = predict(mod, test)
+  diffMat = as.numeric(preds) - as.numeric(test$TARGET)
+  diffMat = diffMat^2
+  loss <- mean(diffMat)
+  return(loss)
+}
+```
+
+
+
+```{r include=FALSE}
+df1 <- modVal(mod4, as.data.frame(imputed))
+df2 <- modVal(poissonmod2, as.data.frame(imputed))
+df3 <- modVal(poissonmod1, as.data.frame(imputed))
+df4 <- modVal(negbinomMod, as.data.frame(imputed))
+df5 <- modVal(mod5, as.data.frame(imputed))
+df6 <- modVal(glmmodel, as.data.frame(imputed))
+df7 <- modVal(glmmodelabs, as.data.frame(absdata))
+
+```
+
+
+```{r echo=FALSE}
+compare_model1 <- c(df1)
+compare_model2 <- c(df2)
+compare_model3 <- c(df3)
+compare_model4 <- c(df4)
+compare_model5 <- c(df5)
+compare_model6 <- c(df6)
+compare_model7 <- c(df7)
+
+compare <- data.frame(compare_model1, compare_model2, compare_model3, compare_model4, compare_model5, compare_model6, compare_model7)
+colnames(compare) <- c("Linear Model", "Poisson Model 2", "Poisson Model 1", "Negative BinomMod", "Zero Inflation", "GLmulti", "ABS")
+
+kable(compare)
+```
+
+
+```{r echo=FALSE}
+predict1 <- predict(mod4, newdata=new_imputed, type="response")
+summary(predict1)
+```
+
+```{r echo=FALSE}
+predict2 <- predict(glmmodel, newdata=new_imputed, type="response")
+summary(predict2)
+```
